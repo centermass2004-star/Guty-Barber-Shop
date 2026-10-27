@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>El Guty Barber Shop</title>
+<style>
+:root{--bg:#fff;--card:#fff;--tx:#101a2e;--mu:#5d6b82;--bd:#c9d1de;--pr:#1f4fd8;--ac:#101a2e;--rd:#c8102e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:17px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+body::before{content:"";display:block;height:12px;background:repeating-linear-gradient(135deg,#c8102e 0 16px,#fff 16px 32px,#1f4fd8 32px 48px,#fff 48px 64px)}
+#app{max-width:880px;margin:0 auto;padding:14px}
+header{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+header b{flex:1;font-size:22px;letter-spacing:.2px}
+button{font:inherit;font-weight:600;border:2px solid var(--bc,var(--pr));border-radius:10px;padding:12px 18px;background:var(--bc,var(--pr));color:#fff;cursor:pointer}
+button.cb{--bc:var(--pr)}
+button.cr{--bc:var(--rd)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,input:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+button.big{width:100%;padding:20px;font-size:20px;margin:6px 0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin:10px 0}
+h2,h3{margin:6px 0}
+h3{font-size:16px;color:var(--mu);font-weight:600}
+input{font:inherit;width:100%;padding:14px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx)}
+.row{display:flex;gap:8px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.chip{background:#fff;color:var(--bc,var(--pr))}
+.chip.on{background:var(--bc,var(--pr));color:#fff}
+.mu{color:var(--mu)}
+.x{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+td,th{padding:7px 4px;text-align:right;border-bottom:1px solid var(--bd)}
+.t1 td:first-child,.t1 th:first-child,.t2 td:nth-child(2),.t2 th:nth-child(2){text-align:left}
+.tk{font-family:ui-monospace,Menlo,Consolas,monospace;border-style:dashed}
+.tk p{margin:8px 0}
+.big2{font-size:26px;font-weight:700}
+.neg{color:var(--rd);font-weight:700}
+.item{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--bd)}
+.item>div{flex:1}
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:12px 20px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status"></div>
+<script>
+var K='barberia_v1',D,view='login',role=null,bid=null;
+var S={pct:50,delId:null,paid:'',cid:null,tc:'MXN'};
+var F={svc:'',price:'',cur:'MXN',rec:'',tip:''};
+var SV=['Corte','Barba','Corte y barba','Ceja','Corte, barba y ceja','Corte y ceja'];
+try{D=JSON.parse(localStorage.getItem(K))}catch(e){}
+if(!D||!Array.isArray(D.barbers))D={pin:'',rate:18,barbers:[]};
+if(!Array.isArray(D.cuts))D.cuts=[];if(!D.days)D.days={};if(!Array.isArray(D.pic))D.pic=[];if(typeof D.pct!=='number')D.pct=50;S.pct=D.pct;
+D.barbers.forEach(function(b){(b.cuts||[]).forEach(function(c){c.b=b.id;c.bn=b.name;D.cuts.push(c)});delete b.cuts;delete b.fondo});
+function save(){try{localStorage.setItem(K,JSON.stringify(D));return 1}catch(e){toast('No se pudo guardar: el almacenamiento está lleno o bloqueado');return 0}}
+function p2(n){return n<10?'0'+n:''+n}
+function dk(t){var d=new Date(t);return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())}
+function wk(t){var d=new Date(t);d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()}
+function pend(b){return D.cuts.filter(function(c){return c.b===b.id&&!c.pd})}
+function agg(cs){return {n:cs.length,p:sum(cs,'price'),t:sum(cs,'tip')}}
+function fday(k){return (D.days[k]||{}).fondo||0}
+function pendP(b){return D.pic.filter(function(x){return x.b===b.id&&!x.pd})}
+function picCard(b,boss){var q=pendP(b);return '<div class="card"><h3>Picar de la caja'+(q.length?': -'+m(sum(q,'amt'))+' por descontar':'')+'</h3><div class="row"><input id="pic" type="number" inputmode="decimal" placeholder="Monto que se toma (MXN)"><button data-a="pic">Picar</button></div>'+q.slice().reverse().map(function(x){return '<div class="item"><div class="mu">'+fd(x.t)+(x.carry?', saldo anterior':'')+'</div><b>-'+m(x.amt)+'</b>'+(boss?'<button class="sec" data-a="unpic" data-id="'+x.id+'">Quitar</button>':'')+'</div>'}).join('')+'</div>'}
+var R={w:wk(Date.now()),mode:'sem',who:'all',from:'boss'};
+function $(s){return document.querySelector(s)}
+function r2(n){return Math.round(n*100)/100}
+function m(n){return '$'+(+n||0).toFixed(2)}
+function u(n){return 'US$'+(+n||0).toFixed(2)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function sum(a,k){return r2(a.reduce(function(s,c){return s+(c[k]||0)},0))}
+function fd(t){return new Date(t).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}
+function B(){return bid===0?{id:0,name:'El Guty'}:D.barbers.find(function(b){return b.id===bid})}
+var tmr;function toast(s){var t=$('#toast');t.textContent=s;t.className='on';clearTimeout(tmr);tmr=setTimeout(function(){t.className=''},2600)}
+function go(n){S.delC=null;view=n;render()}
+
+function tk(b,c){var usd=c.cur==='USD';
+return '<div class="card tk"><b>Barbería</b><div class="mu">'+fd(c.t)+', '+esc(b.name)+'</div><hr>'+
+'<p>'+esc(c.svc)+'<br>Precio: <b>'+m(c.price)+'</b> MXN ('+u(c.price/c.rate)+')</p>'+
+'<p>Pagó en '+c.cur+': '+(usd?u(c.rec):m(c.rec))+'<br>Cambio: '+m(c.chM)+' MXN o '+u(c.chM/c.rate)+'</p>'+
+'<p class="mu">Tipo de cambio: '+c.rate+'</p>'+
+(c.tip?'<hr><p>Propina: <b>'+m(c.tip)+'</b>'+(c.tc==='USD'?' ('+u(c.tr)+')':'')+'</p>':'')+'</div>'}
+
+function payHtml(b,p){var c=pend(b),pc=pendP(b),sub=sum(c,'price'),com=r2(sub*p/100),tip=sum(c,'tip'),pi=sum(pc,'amt'),tot=r2(com-pi);
+return '<div class="card tk"><b>Pago a '+esc(b.name)+'</b><div class="mu">'+fd(Date.now())+'</div><div class="x"><table class="t2"><tr><th>#</th><th>Servicio</th><th>Precio</th><th>'+p+'%</th><th>Propina</th></tr>'+
+c.map(function(x,i){return '<tr><td>'+(i+1)+'</td><td>'+esc(x.svc)+'</td><td>'+m(x.price)+'</td><td>'+m(x.price*p/100)+'</td><td>'+(x.tip?m(x.tip):'-')+'</td></tr>'}).join('')+'</table></div>'+
+'<p>Cortes: '+c.length+'<br>Suma de cortes: '+m(sub)+'<br>Comisión ('+p+'%): '+m(com)+'</p>'+
+(pc.length?'<p>Picadas descontadas:<br>'+pc.map(function(x){return fd(x.t)+(x.carry?' saldo anterior':'')+': -'+m(x.amt)}).join('<br>')+'<br>Total de picadas: -'+m(pi)+'</p>':'')+'<p>Sueldo sin picar (si no hubiera pedido dinero de la caja): <b>'+m(com)+'</b><br>Sueldo picado (ya restando las picadas): <b>'+m(Math.max(tot,0))+'</b></p><p class="big2">'+(tot<0?'El barbero debe a la caja: '+m(-tot):'Sueldo a pagar: '+m(tot))+'</p><p>Propinas (suma aparte, no van en el sueldo): <b>'+m(tip)+'</b></p></div>'}
+
+function calc(){var R=D.rate,p=+F.price||0,usd=F.cur==='USD',due=usd?p/R:p,rec=F.rec===''?due:(+F.rec||0),ch=(usd?rec*R:rec)-p;
+F.ok=p>0&&ch>=-0.005;
+$('#res').innerHTML='<div>A cobrar: <b>'+m(p)+'</b> MXN, equivale a <b>'+u(p/R)+'</b></div>'+
+(ch>=-0.005?'<div>Cambio a entregar:</div><div class="big2">'+m(Math.max(ch,0))+' MXN <span class="mu">o</span> '+u(Math.max(ch,0)/R)+'</div>':'<div class="neg">Faltan '+m(-ch)+' MXN ('+u(-ch/R)+')</div>')}
+
+var V={
+login:function(){return '<h2>¿Quién eres?</h2><div class="grid">'+(D.barbers.map(function(b){return '<button class="big" data-a="bin" data-id="'+b.id+'">'+esc(b.name)+'</button>'}).join('')||'<p class="mu">Todavía no hay barberos. El Guty debe crear los perfiles.</p>')+'</div><button class="big sec" data-a="boss">Entrar como El Guty</button>'},
+pin:function(){return '<div class="card"><h2>'+(D.pin?'PIN de El Guty':'Crea el PIN de El Guty')+'</h2>'+(D.pin?'':'<p class="mu">Mínimo 4 dígitos. Lo pedirá cada vez que entre El Guty.</p>')+'<input id="pin" type="password" inputmode="numeric" autocomplete="off"><button class="big" data-a="pinok">Entrar</button></div>'},
+boss:function(){var tf=D.days[dk(Date.now())];return '<h2>Menú de El Guty</h2>'+
+'<div class="card"><h3>Fondo con el que inicia el día (MXN)</h3><p class="mu">'+(tf?'Fondo de hoy: '+m(tf.fondo):'Todavía no registras el fondo de hoy.')+'</p><div class="row"><input id="fondo" type="number" inputmode="decimal" value="'+(tf?tf.fondo:'')+'"><button data-a="fondo">'+(tf?'Actualizar':'Iniciar día')+'</button></div></div><button class="big" data-a="breg">Registrar mi corte</button><button class="big" data-a="cd">Corte del día</button><button class="big" data-a="cw">Corte de la semana</button><button class="big" data-a="cuts">Cortes registrados</button><button class="big" data-a="rp">Caja y actividad</button>'+
+'<div class="card"><h3>Tipo de cambio (pesos por 1 dólar)</h3><div class="row"><input id="rate" type="number" inputmode="decimal" step="0.01" value="'+D.rate+'"><button data-a="rate">Guardar</button></div></div>'+
+'<div class="card"><h3>Porcentaje del barbero (el resto es de El Guty)</h3><p class="mu">El Guty se queda con el '+r2(100-D.pct)+'% de los cobros.</p><div class="row"><input id="bpct" type="number" inputmode="decimal" value="'+D.pct+'"><b>%</b><button data-a="savepct">Guardar</button></div></div>'+
+'<div class="card"><h3>Crear barbero</h3><div class="row"><input id="nn" placeholder="Nombre del barbero"><button data-a="add">Crear</button></div></div>'+
+'<div class="card"><h3>Barberos</h3>'+(D.barbers.map(function(b){return '<div class="item"><div><b>'+esc(b.name)+'</b><div class="mu">'+pend(b).length+' cortes sin pagar, '+m(sum(pend(b),'price'))+'</div></div><button data-a="bopen" data-id="'+b.id+'">Abrir</button></div>'}).join('')||'<p class="mu">Crea el primer perfil arriba.</p>')+'</div>'+
+'<div class="card"><h3>Cambiar PIN</h3><div class="row"><input id="npin" type="password" inputmode="numeric" placeholder="Nuevo PIN"><button data-a="chpin">Cambiar</button></div></div>'+
+'<div class="card"><h3>Empezar de cero</h3><p class="mu">Borra todo: barberos, cortes, fondos, picadas, tipo de cambio y el PIN. No se puede deshacer. Escribe BORRAR para confirmar.</p><div class="row"><input id="wipe" autocomplete="off" placeholder="BORRAR"><button class="red" data-a="wipe">Borrar todo</button></div></div>'},
+bbar:function(){var b=B(),c=pend(b);return '<h2>'+esc(b.name)+'</h2><p class="mu">'+c.length+' cortes sin pagar, '+m(sum(c,'price'))+' en cortes, '+m(sum(c,'tip'))+' en propinas</p>'+picCard(b,1)+
+
+'<div class="card"><h3>Cortes sin pagar ('+c.length+')</h3>'+(cutList(c)||'<p class="mu">No tiene cortes pendientes de pago.</p>')+'</div>'+
+'<div class="card"><h3>Pagar al barbero</h3><div class="row"><input id="pct" type="number" inputmode="decimal" value="'+S.pct+'"><b>%</b><button data-a="topay">Ver ticket</button></div></div>'+
+'<button class="big sec" data-a="brep">Ver su actividad</button><button class="big red" data-a="del">'+(S.delId===b.id?(c.length?'Tiene cortes sin pagar. Toca otra vez para borrar':'¿Seguro? Toca otra vez para borrar'):'Borrar barbero')+'</button><p class="mu">Su historial se conserva en los reportes.</p>'},
+pay:function(){return '<h2>Pagar</h2>'+payHtml(B(),S.pct)+'<button class="big" data-a="confirm">Confirmar pago y empezar de cero</button>'},
+paid:function(){return '<h2>Pago realizado</h2>'+S.paid+'<button class="big" data-a="topb">Listo</button>'},
+barber:function(){var b=B(),c=pend(b).reverse();return '<h2>Hola, '+esc(b.name)+'</h2><button class="big" data-a="reg">Caja registradora</button><button class="big" data-a="cd">Mi corte del día</button><button class="big" data-a="cw">Mi corte de la semana</button><button class="big" data-a="cuts">Mis cortes registrados</button>'+picCard(b)+
+'<div class="card"><h3>Mis cortes sin pagar: '+c.length+', '+m(sum(c,'price'))+', propinas '+m(sum(c,'tip'))+'</h3>'+
+(c.map(function(x){return '<div class="item"><div>'+esc(x.svc)+'<div class="mu">'+fd(x.t)+'</div></div><b>'+m(x.price)+'</b>'+(x.tip?'<span class="mu">+'+m(x.tip)+'</span>':'')+delBtn(x)+'</div>'}).join('')||'<p class="mu">No tienes cortes pendientes de pago.</p>')+'</div>'},
+reg:function(){return '<h2>Caja registradora</h2>'+
+'<div class="card"><h3>Servicio</h3><div class="chips">'+SV.map(function(s){return '<button class="chip'+(F.svc===s?' on':'')+'" data-a="svc" data-v="'+s+'">'+s+'</button>'}).join('')+'</div></div>'+
+'<div class="card"><h3>Precio cobrado (MXN)</h3><input data-f="price" type="number" inputmode="decimal" value="'+F.price+'"></div>'+
+'<div class="card"><h3>El cliente paga en</h3><div class="chips">'+['MXN','USD'].map(function(c){return '<button class="chip'+(F.cur===c?' on':'')+'" data-a="cur" data-v="'+c+'">'+(c==='MXN'?'Pesos':'Dólares')+'</button>'}).join('')+'</div><input data-f="rec" type="number" inputmode="decimal" placeholder="Monto recibido (vacío si pagó exacto)" value="'+F.rec+'"></div>'+
+'<div class="card" id="res"></div><button class="big" data-a="cobrar">Cobrar</button>'},
+ticket:function(){var b=B(),c=D.cuts.find(function(x){return x.id===S.cid});return '<h2>Ticket</h2>'+tk(b,c)+
+(c.tip?'':'<div class="card"><h3>¿El cliente dejó propina?</h3><div class="chips">'+['MXN','USD'].map(function(t){return '<button class="chip'+(S.tc===t?' on':'')+'" data-a="tc" data-v="'+t+'">'+(t==='MXN'?'Pesos':'Dólares')+'</button>'}).join('')+'</div><div class="row"><input data-f="tip" type="number" inputmode="decimal" placeholder="Monto de la propina" value="'+F.tip+'"><button data-a="savetip">Guardar propina</button></div></div>')+
+'<div class="row"><button class="sec" style="flex:1" data-a="fin">Terminar</button><button style="flex:1" data-a="reg">Nuevo cobro</button></div><button class="big red" data-a="delc" data-id="'+c.id+'">'+(S.delC===c.id?'¿Seguro? Toca otra vez para borrar':'Borrar este corte (me equivoqué)')+'</button>'}
+};
+var BACK={pin:'login',boss:'login',barber:'login',bbar:'boss',pay:'bbar',paid:'bbar',reg:'barber',ticket:'barber'};
+function canDel(c){return role==='boss'||(c.b===bid&&!c.pd)}
+function delBtn(c){return canDel(c)?'<button class="red" data-a="delc" data-id="'+c.id+'">'+(S.delC===c.id?'¿Seguro? Toca otra vez'+(c.pd?' (ya está pagado)':''):'Borrar')+'</button>':''}
+function cutList(cs){return cs.slice().reverse().map(function(x){return '<div class="item"><div>'+esc(x.svc)+'<div class="mu">'+fd(x.t)+', '+esc(x.bn)+(x.pd?', pagado':'')+'</div></div><b>'+m(x.price)+'</b>'+(x.tip?'<span class="mu">+'+m(x.tip)+'</span>':'')+delBtn(x)+'</div>'}).join('')}
+function byB(cs,ps){var o={},k=[];cs.forEach(function(c){var x=o[c.b];if(!x){x=o[c.b]={n:c.bn,c:0,p:0,t:0,q:0};k.push(c.b)}x.n=c.bn;x.c++;x.p+=c.price;x.t+=c.tip||0});(ps||[]).forEach(function(q){var x=o[q.b];if(!x){x=o[q.b]={n:q.bn,c:0,p:0,t:0,q:0};k.push(q.b)}x.q+=q.amt});
+return '<div class="x"><table class="t1"><tr><th>Barbero</th><th>Cortes</th><th>Cobros</th><th>Propinas</th><th>Picadas</th></tr>'+k.map(function(i){var x=o[i];return '<tr><td>'+esc(x.n)+'</td><td>'+x.c+'</td><td>'+m(r2(x.p))+'</td><td>'+m(r2(x.t))+'</td><td>'+m(r2(x.q))+'</td></tr>'}).join('')+'</table></div>'}
+function sec(h,cs,fo,all,ps){ps=ps||[];var a=agg(cs),pi=sum(ps,'amt');
+return '<div class="card"><h3>'+h+'</h3><p>Cortes: '+a.n+'<br>'+(all?'Fondo: '+m(fo)+'<br>':'')+'Cobros: '+m(a.p)+'<br>Propinas: '+m(a.t)+(pi?'<br>Picadas: -'+m(pi):'')+'</p><p class="big2">'+(all?'Total en caja: ':'Total del barbero: ')+m(r2((all?fo:0)+a.p-pi))+'</p>'+((a.n||pi)?(all?byB(cs,ps)+cutList(cs):cutList(cs)):'')+'</div>'}
+V.rep=function(){var w=R.w,all=R.who==='all',d0=new Date(w),d6=new Date(w);d6.setDate(d6.getDate()+6);
+var ds=[0,1,2,3,4,5,6].map(function(i){var d=new Date(w);d.setDate(d.getDate()+i);return d});
+var cs=D.cuts.filter(function(c){return wk(c.t)===w&&(all||c.b===R.who)});
+var pw=D.pic.filter(function(q){return !q.carry&&wk(q.t)===w&&(all||q.b===R.who)});
+var f=function(d){return d.toLocaleDateString('es-MX',{day:'numeric',month:'short'})};
+var h='<h2>Caja y actividad</h2><div class="row"><button class="sec" data-a="rprev">&larr;</button><b style="flex:1;text-align:center">Semana del '+f(d0)+' al '+f(d6)+'</b><button class="sec" data-a="rnext"'+(w>=wk(Date.now())?' disabled':'')+'>&rarr;</button></div>'+
+'<div class="chips" style="margin-top:10px">'+[['sem','Semana completa'],['dia','Por días']].map(function(x){return '<button class="chip'+(R.mode===x[0]?' on':'')+'" data-a="rmode" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>'+
+'<div class="chips">'+[['all','Todos']].concat(D.barbers.map(function(b){return [b.id,esc(b.name)]})).map(function(x){return '<button class="chip'+(R.who===x[0]?' on':'')+'" data-a="rwho" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>';
+if(R.mode==='sem'){var fo=0;ds.forEach(function(d){fo+=fday(dk(d))});return h+sec('Semana completa',cs,fo,all,pw)}
+var o='';ds.forEach(function(d){var k=dk(d),dc=cs.filter(function(c){return dk(c.t)===k}),fo=fday(k);
+var dp=pw.filter(function(q){return dk(q.t)===k});if(dc.length||dp.length||(all&&fo))o+=sec(d.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'short'}),dc,fo,all,dp)});
+return h+(o||'<p class="mu">Sin actividad esta semana.</p>')};
+
+function dstart(t){var d=new Date(t);d.setHours(0,0,0,0);return d.getTime()}
+var CS={mode:'dia',t:dstart(Date.now())};
+function pp(c){return typeof c.pp==='number'?c.pp:D.pct}
+function tally(cs,ps){var P=0,T=0,bs=0,n=0,on=0,oP=0,oT=0,o={};cs.forEach(function(c){if(c.b===0){on++;oP+=c.price||0;oT+=c.tip||0;return}n++;P+=c.price||0;T+=c.tip||0;bs+=r2((c.price||0)*pp(c)/100);o[pp(c)]=1});
+P=r2(P);T=r2(T);bs=r2(bs);oP=r2(oP);oT=r2(oT);var k=Object.keys(o),pi=sum(ps,'amt'),js=r2(P-bs);
+return {n:n,on:on,oP:oP,oT:oT,P:P,T:T,bs:bs,js:js,jt:r2(js+oP+oT),bg:bs,pi:pi,net:r2(bs-pi),pct:k.length===1?+k[0]:(k.length?null:D.pct)}}
+function pl(x){return x.pct===null?'':' ('+x.pct+'%)'}
+function cday(d,who){return D.cuts.filter(function(c){return dk(c.t)===dk(d)&&(who==='all'||c.b===who)})}
+function pday(d,who){return D.pic.filter(function(q){return !q.carry&&dk(q.t)===dk(d)&&(who==='all'||q.b===who)})}
+function grp(cs,ps){var o={},k=[];function g(c){if(!o[c.b]){o[c.b]={n:c.bn,c:[],p:[]};k.push(c.b)}return o[c.b]}
+cs.forEach(function(c){if(c.b!==0)g(c).c.push(c)});ps.forEach(function(q){g(q).p.push(q)});return k.map(function(i){return o[i]})}
+function cells(x,boss,b){var a=boss?[m(r2(x.P+x.oP)),m(x.jt)]:[m(x.bg),x.pi?'-'+m(x.pi):'-',m(x.T)];return a.map(function(s){return '<td>'+(b?'<b>'+s+'</b>':s)+'</td>'}).join('')}
+function bblock(name,x,me){return '<div class="card"><h3>'+name+'</h3><p>Cortes: '+x.n+'<br>Cobros: '+m(x.P)+'</p><p class="big2">Sueldo sin picar'+pl(x)+': '+m(x.bg)+'</p><p>Picadas: -'+m(x.pi)+'</p><p class="big2">Sueldo picado: '+m(x.net)+'</p><p>Propinas (aparte, no van en el sueldo): <b>'+m(x.T)+'</b></p></div>'}
+V.corte=function(){var boss=role==='boss',who=boss?'all':bid,sem=CS.mode==='sem',n=sem?7:1,cs=[],ps=[],fo=0,dl=[],i,d,c,q;
+for(i=0;i<n;i++){d=new Date(CS.t);d.setDate(d.getDate()+i);c=cday(d,who);q=pday(d,who);cs=cs.concat(c);ps=ps.concat(q);fo=r2(fo+fday(dk(d)));dl.push({d:d,x:tally(c,q),f:fday(dk(d))})}
+var x=tally(cs,ps),fm=function(z){return z.toLocaleDateString('es-MX',{day:'numeric',month:'short'})},
+lab=sem?'Semana del '+fm(dl[0].d)+' al '+fm(dl[n-1].d):dl[0].d.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'}),
+last=sem?CS.t>=wk(Date.now()):CS.t>=dstart(Date.now()),
+ttl=boss?(sem?'Corte de la semana':'Corte del día'):(sem?'Mi corte de la semana':'Mi corte del día');
+var h='<h2>'+ttl+'</h2><div class="row"><button data-a="cprev" aria-label="Anterior">&larr;</button><b style="flex:1;text-align:center">'+lab+'</b><button data-a="cnext" aria-label="Siguiente"'+(last?' disabled':'')+'>&rarr;</button></div>'+
+'<div class="chips" style="margin-top:10px">'+[['dia','Día'],['sem','Semana']].map(function(z){return '<button class="chip'+(CS.mode===z[0]?' on':'')+'" data-a="cmode" data-v="'+z[0]+'">'+z[1]+'</button>'}).join('')+'</div>';
+var dt=sem?'<div class="card"><h3>Día por día</h3><div class="x"><table class="t1"><tr><th>Día</th><th>Cortes</th>'+(boss?'<th>Cobros</th><th>El Guty</th>':'<th>Sueldo</th><th>Picadas</th><th>Propinas</th>')+'</tr>'+
+dl.map(function(y){return '<tr><td>'+y.d.toLocaleDateString('es-MX',{weekday:'short',day:'numeric'})+'</td><td>'+(y.x.n+y.x.on)+'</td>'+cells(y.x,boss,0)+'</tr>'}).join('')+
+'<tr><td><b>Total</b></td><td><b>'+(x.n+x.on)+'</b></td>'+cells(x,boss,1)+'</tr></table></div><p class="mu">'+(boss?'El Guty = lo que le queda por los barberos + sus propios cortes y propinas.':'Sueldo = tu parte de los cobros, antes de picadas. Las propinas van aparte.')+'</p></div>':'';
+var cl=cs.length?'<div class="card"><h3>'+(sem?'Cortes de la semana':'Cortes del día')+' ('+cs.length+')</h3>'+cs.slice().reverse().map(function(c){return '<div class="item"><div>'+esc(c.svc)+'<div class="mu">'+fd(c.t)+(boss?', '+esc(c.bn):'')+(c.pd?', pagado':'')+'</div></div><b>'+m(c.price)+'</b>'+(c.tip?'<span class="mu">+'+m(c.tip)+'</span>':'')+delBtn(c)+'</div>'}).join('')+'</div>':'';
+var ct=(sem&&boss)?'<div class="card"><h3>Caja día por día</h3><div class="x"><table class="t1"><tr><th>Día</th><th>Fondo</th><th>Cortes</th><th>Suma</th></tr>'+dl.map(function(y){return '<tr><td>'+y.d.toLocaleDateString('es-MX',{weekday:'short',day:'numeric'})+'</td><td>'+m(y.f)+'</td><td>'+m(r2(y.x.P+y.x.oP))+'</td><td>'+m(r2(y.f+y.x.P+y.x.oP))+'</td></tr>'}).join('')+'<tr><td><b>Total</b></td><td><b>'+m(fo)+'</b></td><td><b>'+m(r2(x.P+x.oP))+'</b></td><td><b>'+m(r2(fo+x.P+x.oP))+'</b></td></tr></table></div><p class="mu">Suma = fondo + precio de los cortes de ese día.</p></div>':'';
+if(!boss)return h+bblock(sem?'Lo que generaste en la semana':'Lo que generaste',x,1)+dt+cl;
+var g=grp(cs,ps);
+return h+'<div class="card"><h3>Lo que hicieron los barberos</h3><p>Cortes: '+x.n+'<br>Propinas (aparte, son de los barberos): '+m(x.T)+'</p><p class="big2">Precio de los cortes: '+m(x.P)+'</p></div>'+
+'<div class="card"><h3>Ganancia de El Guty</h3><div class="x"><table class="t1"><tr><td>Cobros de los barberos</td><td>'+m(x.P)+'</td></tr><tr><td>Parte de los barberos'+pl(x)+'</td><td>-'+m(x.bs)+'</td></tr><tr><td>Le queda por los barberos</td><td>'+m(x.js)+'</td></tr><tr><td>Sus propios cortes ('+x.on+')</td><td>'+m(x.oP)+'</td></tr><tr><td>Propinas de sus cortes</td><td>'+m(x.oT)+'</td></tr></table></div><p class="big2">Ganancia de El Guty: '+m(x.jt)+'</p><p class="mu">'+(x.pct!==null?'El Guty se queda con el '+r2(100-x.pct)+'% de los cobros de los barberos y el 100% de sus propios cortes.':'El Guty se queda con el 100% de sus propios cortes.')+'</p></div>'+
+dt+
+'<div class="card"><h3>Todos los barberos</h3><p>Cobros de los barberos: '+m(x.P)+'</p><p class="big2">Sueldos sin picar'+pl(x)+': '+m(x.bg)+'</p><p>Picadas: -'+m(x.pi)+'</p><p class="big2">Sueldos picados: '+m(x.net)+'</p><p>Propinas (aparte): '+m(x.T)+'</p></div>'+
+(g.length?'<h3>Por barbero</h3>'+g.map(function(z){return bblock(esc(z.n),tally(z.c,z.p),0)}).join(''):'')+
+cl+ct+'<div class="card"><h3>Registro de caja</h3><p>Fondo de la caja: '+m(fo)+'<br>Precio de los cortes (completo, antes de pagar): '+m(r2(x.P+x.oP))+'</p><p class="big2">Suma: '+m(r2(fo+x.P+x.oP))+'</p>'+(x.pi?'<p class="mu">Picadas de los barberos: -'+m(x.pi)+'. Queda en caja: '+m(r2(fo+x.P+x.oP-x.pi))+'</p>':'')+'</div>'};
+
+V.cuts=function(){var all=role==='boss',cs=D.cuts.filter(function(c){return all||c.b===bid}).sort(function(a,b){return b.t-a.t}),n=S.cn||30,sh=cs.slice(0,n).reverse();
+return '<h2>'+(all?'Cortes registrados':'Mis cortes registrados')+'</h2><p class="mu">'+cs.length+' cortes en total, del más reciente al más antiguo. '+(all?'Puedes borrar cualquier corte.':'Puedes borrar los que todavía no se han pagado.')+'</p><div class="card">'+(sh.length?cutList(sh):'<p class="mu">Todavía no hay cortes registrados.</p>')+'</div>'+(cs.length>n?'<button class="big" data-a="cmore">Ver más cortes</button>':'')};
+
+function render(){
+$('#app').innerHTML='<header>'+(view!=='login'?'<button class="sec" data-a="back" aria-label="Atrás">&larr;</button>':'')+'<b>El Guty Barber Shop</b>'+(role?'<button class="sec" data-a="out">Salir</button>':'')+'</header>'+V[view]();
+var nx='cb';document.querySelectorAll('#app button').forEach(function(b){var c=b.classList.contains('red')?'cr':nx;b.classList.add(c);nx=c==='cb'?'cr':'cb'});
+if(view==='reg')calc();window.scrollTo(0,0)}
+
+var A={
+bin:function(d){bid=+d.id;role='b';go('barber')},
+boss:function(){go('pin')},
+pinok:function(){var v=$('#pin').value.trim();
+ if(!D.pin){if(v.length<4)return toast('El PIN debe tener al menos 4 dígitos');D.pin=v;save()}
+ else if(v!==D.pin)return toast('PIN incorrecto');
+ role='boss';go('boss')},
+rate:function(){var v=+$('#rate').value;if(!(v>0))return toast('Escribe un tipo de cambio válido');D.rate=v;save();toast('Tipo de cambio guardado')},
+add:function(){var n=$('#nn').value.trim();if(!n)return toast('Escribe el nombre');D.barbers.push({id:Date.now(),name:n});save();render();toast('Barbero creado')},
+bopen:function(d){bid=+d.id;S.delId=null;go('bbar')},
+fondo:function(){var s=$('#fondo').value;if(s===''||!(+s>=0))return toast('Escribe el fondo del día');D.days[dk(Date.now())]={fondo:r2(+s)};save();render();toast('Fondo del día guardado')},
+topay:function(){var p=+$('#pct').value;if(!(p>=0&&p<=100))return toast('El porcentaje debe estar entre 0 y 100');if(!pend(B()).length)return toast('Este barbero no tiene cortes sin pagar');S.pct=p;go('pay')},
+confirm:function(){var b=B(),t=Date.now(),tot=r2(r2(sum(pend(b),'price')*S.pct/100)-sum(pendP(b),'amt'));S.paid=payHtml(b,S.pct);pend(b).forEach(function(c){c.pd=t;c.pp=S.pct});pendP(b).forEach(function(x){x.pd=t});if(tot<0)D.pic.push({id:t,t:t,b:b.id,bn:b.name,amt:-tot,carry:1});save();go('paid')},
+topb:function(){go('bbar')},
+del:function(){if(S.delId===bid){D.barbers=D.barbers.filter(function(b){return b.id!==bid});save();bid=null;S.delId=null;go('boss');toast('Barbero borrado')}else{S.delId=bid;render()}},
+chpin:function(){var v=$('#npin').value.trim();if(v.length<4)return toast('El PIN debe tener al menos 4 dígitos');D.pin=v;save();$('#npin').value='';toast('PIN cambiado')},
+back:function(){var t=view==='rep'?R.from:(role==='boss'&&(view==='corte'||view==='reg'||view==='ticket'||view==='cuts'))?'boss':(view==='corte'||view==='cuts')?'barber':BACK[view];if(t==='login'){role=null;bid=null}go(t)},
+out:function(){role=null;bid=null;go('login')},
+reg:function(){F={svc:'',price:'',cur:'MXN',rec:'',tip:''};go('reg')},
+svc:function(d){F.svc=d.v;render()},
+cur:function(d){F.cur=d.v;render()},
+cobrar:function(){calc();if(!F.svc)return toast('Elige el servicio');if(!F.ok)return toast('Revisa el precio y el monto recibido');
+ var R=D.rate,p=+F.price,usd=F.cur==='USD',due=usd?p/R:p,rec=F.rec===''?due:+F.rec,chM=Math.max(r2((usd?rec*R:rec)-p),0);
+ var c={id:Date.now(),t:Date.now(),b:bid,bn:B().name,svc:F.svc,price:r2(p),cur:F.cur,rec:r2(rec),chM:chM,rate:R,tip:0};
+ D.cuts.push(c);save();S.cid=c.id;S.tc='MXN';F.tip='';go('ticket')},
+tc:function(d){S.tc=d.v;render()},
+savetip:function(){var v=+F.tip;if(!(v>0))return toast('Escribe el monto de la propina');var c=D.cuts.find(function(x){return x.id===S.cid});
+ c.tip=r2(S.tc==='USD'?v*D.rate:v);c.tc=S.tc;c.tr=v;save();render();toast('Propina guardada')},
+fin:function(){go(role==='boss'?'boss':'barber')},
+rp:function(){R={w:wk(Date.now()),mode:'sem',who:'all',from:'boss'};go('rep')},
+brep:function(){R={w:wk(Date.now()),mode:'sem',who:bid,from:'bbar'};go('rep')},
+rprev:function(){var d=new Date(R.w);d.setDate(d.getDate()-7);R.w=wk(d.getTime());render()},
+rnext:function(){var d=new Date(R.w);d.setDate(d.getDate()+7);R.w=wk(d.getTime());render()},
+rmode:function(d){R.mode=d.v;render()},
+rwho:function(d){R.who=d.v==='all'?'all':+d.v;render()},
+pic:function(){var v=+$('#pic').value;if(!(v>0))return toast('Escribe el monto que se toma de la caja');D.pic.push({id:Date.now(),t:Date.now(),b:bid,bn:B().name,amt:r2(v)});save();render();toast('Picada registrada')},
+unpic:function(d){D.pic=D.pic.filter(function(x){return x.id!==+d.id});save();render()},
+breg:function(){bid=0;A.reg()},
+delc:function(d){var id=+d.id,c=D.cuts.find(function(x){return x.id===id});if(!c||!canDel(c))return;
+if(S.delC!==id){S.delC=id;render();return}
+D.cuts=D.cuts.filter(function(x){return x.id!==id});S.delC=null;save();if(view==='ticket')A.reg();else render();toast('Corte borrado')},
+cuts:function(){S.cn=30;go('cuts')},
+cmore:function(){S.cn=(S.cn||30)+30;render()},
+wipe:function(){if($('#wipe').value.trim().toUpperCase()!=='BORRAR')return toast('Escribe BORRAR para confirmar');try{localStorage.removeItem(K)}catch(e){}location.reload()},
+savepct:function(){var s=$('#bpct').value;if(s===''||!(+s>=0&&+s<=100))return toast('El porcentaje debe estar entre 0 y 100');D.pct=+s;S.pct=D.pct;save();render();toast('Porcentaje guardado')},
+cd:function(){CS={mode:'dia',t:dstart(Date.now())};go('corte')},
+cw:function(){CS={mode:'sem',t:wk(Date.now())};go('corte')},
+cmode:function(d){if(d.v===CS.mode)return;CS.t=d.v==='sem'?wk(CS.t):(wk(CS.t)===wk(Date.now())?dstart(Date.now()):CS.t);CS.mode=d.v;render()},
+cprev:function(){var x=new Date(CS.t);x.setDate(x.getDate()-(CS.mode==='sem'?7:1));CS.t=CS.mode==='sem'?wk(x.getTime()):dstart(x.getTime());render()},
+cnext:function(){var x=new Date(CS.t);x.setDate(x.getDate()+(CS.mode==='sem'?7:1));CS.t=CS.mode==='sem'?wk(x.getTime()):dstart(x.getTime());render()}
+};
+document.addEventListener('click',function(e){var t=e.target.closest('[data-a]');if(t&&A[t.dataset.a])A[t.dataset.a](t.dataset)});
+document.addEventListener('input',function(e){var k=e.target.dataset.f;if(k){F[k]=e.target.value;if(view==='reg')calc()}});
+render();
+</script>
+</body>
+</html>
